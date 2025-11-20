@@ -53,16 +53,18 @@ class PredictionService:
             horizon = horizon or self.prediction_horizon
 
             # Fetch historical data
-            data = await self.data_fetcher.fetch_historical_data(
+            history_result = await self.data_fetcher.fetch_price_history(
                 symbol,
-                self.lookback_period
+                self.lookback_period,
             )
+
+            data = history_result.get("data") if history_result.get("success") else None
 
             if data is None or data.empty:
                 return {
                     "success": False,
-                    "error": f"Failed to fetch data for {symbol}",
-                    "symbol": symbol
+                    "message": "insufficient_data",
+                    "symbol": symbol,
                 }
 
             # Get current price

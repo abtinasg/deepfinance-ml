@@ -127,7 +127,9 @@ async def predict_price(request: PredictRequest):
         if not result.get("success"):
             raise HTTPException(
                 status_code=400,
-                detail=result.get("error", "Prediction failed")
+                detail=result.get("message")
+                or result.get("error")
+                or "Prediction failed",
             )
 
         return {
@@ -169,7 +171,7 @@ async def calculate_risk(request: RiskRequest):
         if asset_data is None or asset_data.empty:
             raise HTTPException(
                 status_code=400,
-                detail=f"Failed to fetch data for {request.symbol}"
+                detail="insufficient_data",
             )
 
         # Fetch benchmark data if requested
@@ -184,6 +186,9 @@ async def calculate_risk(request: RiskRequest):
             asset_data,
             benchmark_data
         )
+
+        if risk_metrics.get("success") is False:
+            raise HTTPException(status_code=400, detail="insufficient_data")
 
         # Get current price info
         current_price = asset_data['close'].iloc[-1]
