@@ -25,7 +25,7 @@ async def get_http_client() -> AsyncGenerator[httpx.AsyncClient, None]:
 
     if _http_client is None:
         _http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(settings.YAHOO_TIMEOUT),
+            timeout=httpx.Timeout(settings.FINNHUB_TIMEOUT),
             limits=httpx.Limits(
                 max_keepalive_connections=settings.HTTP_POOL_SIZE,
                 keepalive_expiry=settings.HTTP_POOL_KEEPALIVE

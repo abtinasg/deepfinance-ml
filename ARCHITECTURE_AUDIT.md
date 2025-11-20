@@ -104,7 +104,7 @@ detail=f"Internal server error: {str(e)}"
 #### Issue #4: No Rate Limiting
 No protection against abuse. A single client can:
 - Exhaust memory by triggering many LSTM/Transformer predictions
-- DoS the Yahoo Finance API causing IP bans
+- Exhaust Finnhub rate limits causing throttling
 - Consume all CPU resources
 
 ### 2.2 API Design Issues
@@ -217,47 +217,15 @@ returns = np.diff(close) / close[:-1]
 
 ## 4. Services Analysis
 
-### 4.1 Data Fetcher (`services/data_fetcher.py`)
+### 4.1 Data Fetcher (`app/services/data_fetcher.py`)
 
-**Critical Issues:**
+**Overview:**
+- Single data source (Finnhub) with circuit breaker and caching via Redis.
+- Uses async HTTP client with connection pooling.
 
-#### Issue #1: Yahoo Finance Timeout Defaults
-```python
-# data_fetcher.py:23-24
-self.yahoo_timeout = settings.YAHOO_TIMEOUT  # 10 seconds
-```
-**Problem:** 10-second timeout is too short for Yahoo Finance under load. Causes frequent fallback failures.
-
-#### Issue #2: No Caching
-Every request fetches fresh data from Yahoo Finance. This causes:
-- IP rate limiting by Yahoo (401/429 errors)
-- Unnecessary latency (500ms-2s per fetch)
-- Redundant API calls for same symbol within seconds
-
-**Required Fix:** Add Redis or in-memory caching with TTL.
-
-#### Issue #3: Finnhub Fallback Silent Failure
-```python
-# data_fetcher.py:114-116
-if not self.finnhub_api_key:
-    logger.warning("Finnhub API key not configured")
-    return None
-```
-**Problem:** If both sources fail, returns `None` without clear error propagation.
-
-#### Issue #4: asyncio Event Loop Warning
-```python
-# data_fetcher.py:63
-loop = asyncio.get_event_loop()
-```
-**Deprecation Warning:** `get_event_loop()` is deprecated in Python 3.10+. Use `asyncio.get_running_loop()`.
-
-#### Issue #5: No Data Validation
-```python
-# data_fetcher.py:89
-df = df[['open', 'high', 'low', 'close', 'volume']].copy()
-```
-**Problem:** No validation that values are positive, in expected ranges, or not NaN.
+**Concerns:**
+- Input validation and error propagation should ensure callers get explicit failure messages when Finnhub returns malformed payloads.
+- Timeout and circuit breaker thresholds must be tuned for Finnhub rate limits.
 
 ### 4.2 Prediction Service (`services/prediction_service.py`)
 
@@ -371,7 +339,7 @@ torch==2.1.1      # Has known vulnerabilities
 
 | Component | Latency | Cause |
 |-----------|---------|-------|
-| Data Fetch | 500-2000ms | Yahoo Finance API |
+| Data Fetch | 500-2000ms | Finnhub API |
 | XGBoost Train | 100-300ms | Training on each request |
 | LSTM Train | 500-2000ms | 50 epochs on each request |
 | Transformer Train | 500-2000ms | 50 epochs on each request |
@@ -383,7 +351,7 @@ torch==2.1.1      # Has known vulnerabilities
 
 2. **CPU:** Training models is CPU-intensive. No horizontal scaling strategy.
 
-3. **Data:** No caching means Yahoo Finance will rate-limit after ~100 requests/hour.
+3. **Data:** No caching means Finnhub will rate-limit after ~100 requests/hour.
 
 ### 6.3 Recommended Performance Fixes
 

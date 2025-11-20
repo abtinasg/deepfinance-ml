@@ -18,32 +18,31 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd
-import yfinance as yf
-from datetime import datetime, timedelta
 
 from app.models.xgboost_model import XGBoostPredictor
 from app.models.lstm_model import LSTMPredictor
 from app.models.transformer_model import TransformerPredictor
 from app.core.logging import setup_logging, get_logger
+from app.services.data_fetcher import DataFetcher
 
 setup_logging()
 logger = get_logger(__name__)
 
 
-def fetch_training_data(symbol: str, days: int) -> pd.DataFrame:
-    """Fetch historical data for training."""
-    ticker = yf.Ticker(symbol)
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days + 30)  # Extra days for features
+async def fetch_training_data(
+    symbol: str,
+    days: int,
+    fetcher: DataFetcher
+) -> pd.DataFrame:
+    """Fetch historical data for training using Finnhub."""
+    df = await fetcher.fetch_historical_data(symbol, days)
 
-    df = ticker.history(start=start_date, end=end_date)
+    if df is None or df.empty:
+        raise ValueError(
+            f"Failed to fetch data for {symbol} using Finnhub"
+        )
 
-    if df.empty:
-        raise ValueError(f"No data found for {symbol}")
-
-    df.columns = [col.lower() for col in df.columns]
-    df = df[["open", "high", "low", "close", "volume"]]
-    df = df.reset_index(drop=True)
+    df = df[["open", "high", "low", "close", "volume"]].reset_index(drop=True)
 
     logger.info(f"Fetched {len(df)} rows for {symbol}")
     return df
@@ -92,6 +91,24 @@ def train_transformer(data: pd.DataFrame, output_path: Path, epochs: int = 100) 
 
     logger.error("Transformer training failed")
     return False
+
+
+async def gather_training_data(symbols: list[str], days: int) -> list[pd.DataFrame]:
+    """Fetch training datasets for all requested symbols."""
+    fetcher = DataFetcher()
+    datasets: list[pd.DataFrame] = []
+
+    try:
+        for symbol in symbols:
+            try:
+                data = await fetch_training_data(symbol, days, fetcher)
+                datasets.append(data)
+            except Exception as e:
+                logger.error(f"Failed to fetch data for {symbol}: {e}")
+    finally:
+        await fetcher.close()
+
+    return datasets
 
 
 def main():
@@ -158,14 +175,7 @@ def main():
     logger.info(f"Days: {args.days}")
 
     # Combine data from all symbols
-    all_data = []
-
-    for symbol in symbols:
-        try:
-            data = fetch_training_data(symbol, args.days)
-            all_data.append(data)
-        except Exception as e:
-            logger.error(f"Failed to fetch data for {symbol}: {e}")
+    all_data = asyncio.run(gather_training_data(symbols, args.days))
 
     if not all_data:
         logger.error("No training data available")

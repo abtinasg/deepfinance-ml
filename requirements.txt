@@ -18,9 +18,6 @@ xgboost==2.0.3
 scikit-learn==1.4.0
 torch==2.1.2
 
-# Data Sources
-yfinance==0.2.35
-
 # Caching
 redis==5.0.1
 

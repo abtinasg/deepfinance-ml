@@ -20,7 +20,7 @@ A production-ready FastAPI microservice for financial price prediction using ens
 
 ### Performance
 - Redis caching for market data (5 min TTL) and predictions (1 min TTL)
-- Circuit breaker for external APIs (Yahoo Finance, Finnhub)
+- Circuit breaker for external APIs (Finnhub)
 - Connection pooling with httpx
 - Async processing throughout
 

@@ -60,7 +60,9 @@ class PredictionService:
         )
 
         if data is None or data.empty:
-            raise ValueError(f"Failed to fetch data for {symbol}")
+            raise ValueError(
+                f"Failed to fetch data for {symbol} using Finnhub"
+            )
 
         current_price = float(data["close"].iloc[-1])
 
@@ -125,7 +127,7 @@ class PredictionService:
             "ensemble": ensemble,
             "technical_indicators": indicators,
             "metadata": {
-                "data_source": "yahoo_finance",
+                "data_source": "finnhub",
                 "lookback_period": f"{settings.LOOKBACK_PERIOD} days",
                 "generated_at": datetime.utcnow().isoformat()
             },

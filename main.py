@@ -65,8 +65,7 @@ AI-powered financial analysis microservice providing:
 - **Technical Indicators**: RSI, MACD, Bollinger Bands, and more
 
 ### Data Sources
-- Primary: Yahoo Finance (yfinance)
-- Fallback: Finnhub API
+- Provider: Finnhub API
 
 ### Models
 - **XGBoost**: Gradient boosting for feature-based prediction
