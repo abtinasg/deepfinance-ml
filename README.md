@@ -245,14 +245,6 @@ flyctl secrets set ML_SERVICE_API_KEY=your-key
 flyctl deploy
 ```
 
-## Performance
-
-- Health check: ~10ms
-- Symbol info: 50-200ms (cached)
-- Risk analysis: 100-500ms
-- Price prediction: 200-1000ms (cached)
-- First prediction (cold): 2-5s
-
 ## License
 
 MIT License
