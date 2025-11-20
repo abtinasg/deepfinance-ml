@@ -21,6 +21,46 @@ from app.schemas.risk import (
     RiskMetrics,
     VolatilityMetrics,
 )
+from app.schemas.medical import (
+    # Base types
+    MedicalAnalysisResponse,
+    ScoreSet,
+    UISection,
+    SectionItem,
+    RedFlag,
+    Recommendation,
+    Alternative,
+    # Drug Interaction
+    DrugInteractionRequest,
+    DrugInteractionResponse,
+    DrugInteraction,
+    InteractionScoreBreakdown,
+    # Side Effect
+    SideEffectRequest,
+    SideEffectResponse,
+    SideEffect,
+    SymptomCorrelation,
+    # Symptom Analysis
+    SymptomAnalysisRequest,
+    SymptomAnalysisResponse,
+    ConditionMatch,
+    PatternAnalysis,
+    UrgencyAssessment,
+    # Lab Test
+    LabTestRequest,
+    LabTestResponse,
+    LabValue,
+    TrendAnalysis,
+    UnderlyingCause,
+    # Enums
+    SeverityLevel,
+    UrgencyLevel,
+    LikelihoodCategory,
+    InteractionCategory,
+    TimePattern,
+    ClinicalPattern,
+    LabTestCategory,
+)
 
 __all__ = [
     # Common
@@ -41,4 +81,42 @@ __all__ = [
     "RiskResponse",
     "RiskMetrics",
     "VolatilityMetrics",
+    # Medical - Base
+    "MedicalAnalysisResponse",
+    "ScoreSet",
+    "UISection",
+    "SectionItem",
+    "RedFlag",
+    "Recommendation",
+    "Alternative",
+    # Medical - Drug Interaction
+    "DrugInteractionRequest",
+    "DrugInteractionResponse",
+    "DrugInteraction",
+    "InteractionScoreBreakdown",
+    # Medical - Side Effect
+    "SideEffectRequest",
+    "SideEffectResponse",
+    "SideEffect",
+    "SymptomCorrelation",
+    # Medical - Symptom Analysis
+    "SymptomAnalysisRequest",
+    "SymptomAnalysisResponse",
+    "ConditionMatch",
+    "PatternAnalysis",
+    "UrgencyAssessment",
+    # Medical - Lab Test
+    "LabTestRequest",
+    "LabTestResponse",
+    "LabValue",
+    "TrendAnalysis",
+    "UnderlyingCause",
+    # Medical - Enums
+    "SeverityLevel",
+    "UrgencyLevel",
+    "LikelihoodCategory",
+    "InteractionCategory",
+    "TimePattern",
+    "ClinicalPattern",
+    "LabTestCategory",
 ]
