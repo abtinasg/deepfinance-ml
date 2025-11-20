@@ -1,0 +1,57 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.eggs
+*.egg-info
+*.egg
+.mypy_cache
+.pytest_cache
+.coverage
+htmlcov
+.tox
+
+# Environment
+.env
+.env.*
+!.env.example
+venv
+.venv
+env
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Tests (not needed in production image)
+tests
+pytest.ini
+.coveragerc
+
+# Development files
+docker-compose*.yml
+Makefile
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+tmp
+temp
+*.tmp
