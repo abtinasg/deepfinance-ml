@@ -18,7 +18,6 @@ class Settings(BaseSettings):
 
     # Data Provider Settings
     FINNHUB_API_KEY: Optional[str] = os.getenv("FINNHUB_API_KEY", "")
-    YAHOO_TIMEOUT: int = 10
     FINNHUB_TIMEOUT: int = 10
 
     # Model Settings

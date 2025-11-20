@@ -76,6 +76,10 @@ class ConfidenceEngine:
         else:
             magnitude_score = 0.05  # Extreme predictions
 
+        if abs_return >= 0.15:
+            trend_score = 0.05
+            magnitude_score = 0.0
+
         total_confidence = consistency_score + trend_score + magnitude_score
 
         return float(min(max(total_confidence, 0), 1))

@@ -149,7 +149,7 @@ class PredictResponse(BaseModel):
                     "sma_50": 182.0
                 },
                 "metadata": {
-                    "data_source": "yahoo_finance",
+                    "data_source": "finnhub",
                     "lookback_period": "60 days"
                 },
                 "timestamp": "2024-01-15T10:30:00Z"

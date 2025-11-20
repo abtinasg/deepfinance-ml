@@ -46,7 +46,6 @@ RUN pip install --no-cache-dir \
     numpy==1.26.3 \
     pandas==2.1.4 \
     scikit-learn==1.4.0 \
-    yfinance==0.2.35 \
     redis==5.0.1 \
     slowapi==0.1.9 \
     prometheus-client==0.19.0 \

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from starlette.responses import Response
+from starlette.requests import Request
 
 from app.config import get_settings
 from app.core.auth import verify_api_key
@@ -47,7 +48,8 @@ async def health_check():
         timestamp=datetime.utcnow(),
         models=registry.get_status()["models"],
         redis=cache.is_connected,
-        uptime_seconds=time.time() - _startup_time
+        uptime_seconds=time.time() - _startup_time,
+        data_provider="finnhub"
     )
 
 
@@ -57,7 +59,7 @@ async def health_check():
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit("100/minute")
-async def list_models(request: Any = None):
+async def list_models(request: Request):
     """
     Get list of available ML models.
 
@@ -96,7 +98,7 @@ async def list_models(request: Any = None):
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit("100/minute")
-async def get_models_status(request: Any = None):
+async def get_models_status(request: Request):
     """
     Get detailed status of all models.
 

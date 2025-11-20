@@ -9,7 +9,6 @@ from typing import Optional
 import httpx
 import numpy as np
 import pandas as pd
-import yfinance as yf
 
 from app.config import get_settings
 from app.core.cache import get_cache_service
@@ -66,14 +65,9 @@ class CircuitBreaker:
 
 
 class DataFetcher:
-    """
-    Service for fetching market data from multiple sources.
-
-    Uses circuit breaker pattern and caching for reliability.
-    """
+    """Service for fetching market data from Finnhub with caching."""
 
     def __init__(self):
-        self._yahoo_breaker = CircuitBreaker("yahoo_finance")
         self._finnhub_breaker = CircuitBreaker("finnhub")
         self._http_client: Optional[httpx.AsyncClient] = None
 
@@ -82,7 +76,7 @@ class DataFetcher:
         if self._http_client is None:
             settings = get_settings()
             self._http_client = httpx.AsyncClient(
-                timeout=httpx.Timeout(settings.YAHOO_TIMEOUT),
+                timeout=httpx.Timeout(settings.FINNHUB_TIMEOUT),
                 limits=httpx.Limits(
                     max_keepalive_connections=50,
                     keepalive_expiry=30
@@ -112,12 +106,7 @@ class DataFetcher:
             logger.debug(f"Cache hit for {symbol}")
             return pd.DataFrame(cached)
 
-        # Try Yahoo Finance first
-        df = await self._fetch_from_yahoo(symbol, period_days)
-
-        if df is None:
-            # Fallback to Finnhub
-            df = await self._fetch_from_finnhub(symbol, period_days)
+        df = await self._fetch_from_finnhub(symbol, period_days)
 
         if df is not None and not df.empty:
             # Cache the result
@@ -128,74 +117,14 @@ class DataFetcher:
             )
             return df
 
-        logger.error(f"Failed to fetch data for {symbol}")
+        logger.error(f"Failed to fetch data for {symbol} using Finnhub")
         return None
-
-    async def _fetch_from_yahoo(
-        self,
-        symbol: str,
-        period_days: int
-    ) -> Optional[pd.DataFrame]:
-        """Fetch data from Yahoo Finance."""
-        if self._yahoo_breaker.is_open:
-            logger.warning("Yahoo Finance circuit breaker is open")
-            return None
-
-        try:
-            # Use thread pool for blocking yfinance call
-            loop = asyncio.get_running_loop()
-            df = await loop.run_in_executor(
-                None,
-                self._fetch_yahoo_sync,
-                symbol,
-                period_days
-            )
-
-            if df is not None and not df.empty:
-                self._yahoo_breaker.record_success()
-                logger.debug(f"Fetched {len(df)} rows from Yahoo for {symbol}")
-                return df
-
-            self._yahoo_breaker.record_failure()
-            return None
-
-        except Exception as e:
-            logger.error(f"Yahoo Finance error: {e}", extra={"symbol": symbol})
-            self._yahoo_breaker.record_failure()
-            return None
-
-    def _fetch_yahoo_sync(
-        self,
-        symbol: str,
-        period_days: int
-    ) -> Optional[pd.DataFrame]:
-        """Synchronous Yahoo Finance fetch."""
-        try:
-            ticker = yf.Ticker(symbol)
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=period_days + 10)
-
-            df = ticker.history(start=start_date, end=end_date)
-
-            if df.empty:
-                return None
-
-            # Standardize column names
-            df.columns = [col.lower() for col in df.columns]
-            df = df[["open", "high", "low", "close", "volume"]]
-            df = df.reset_index(drop=True)
-
-            return df.tail(period_days)
-
-        except Exception as e:
-            logger.error(f"Yahoo sync error: {e}")
-            return None
 
     async def _fetch_from_finnhub(
         self,
         symbol: str,
         period_days: int
-    ) -> Optional[pd.DataFrame]:
+        ) -> Optional[pd.DataFrame]:
         """Fetch data from Finnhub API."""
         settings = get_settings()
 
@@ -231,6 +160,15 @@ class DataFetcher:
                 self._finnhub_breaker.record_failure()
                 return None
 
+            required_fields = {"o", "h", "l", "c", "v", "t"}
+            if not required_fields.issubset(data):
+                self._finnhub_breaker.record_failure()
+                logger.error(
+                    f"Finnhub response missing fields for {symbol}",
+                    extra={"missing": required_fields - set(data.keys())}
+                )
+                return None
+
             df = pd.DataFrame({
                 "open": data["o"],
                 "high": data["h"],
@@ -238,6 +176,17 @@ class DataFetcher:
                 "close": data["c"],
                 "volume": data["v"]
             })
+
+            if not data.get("t"):
+                self._finnhub_breaker.record_failure()
+                logger.error(f"Finnhub returned no timestamps for {symbol}")
+                return None
+
+            df.index = pd.to_datetime(data["t"], unit="s")
+
+            if df.empty:
+                self._finnhub_breaker.record_failure()
+                return None
 
             self._finnhub_breaker.record_success()
             logger.debug(f"Fetched {len(df)} rows from Finnhub for {symbol}")
@@ -250,10 +199,46 @@ class DataFetcher:
 
     async def fetch_current_price(self, symbol: str) -> Optional[float]:
         """Fetch current price for a symbol."""
-        df = await self.fetch_historical_data(symbol, period_days=5)
-        if df is not None and not df.empty:
-            return float(df["close"].iloc[-1])
-        return None
+        settings = get_settings()
+
+        if not settings.FINNHUB_API_KEY:
+            logger.warning("Finnhub API key not configured")
+            return None
+
+        if self._finnhub_breaker.is_open:
+            logger.warning("Finnhub circuit breaker is open")
+            return None
+
+        try:
+            client = await self._get_client()
+            url = (
+                f"https://finnhub.io/api/v1/quote?symbol={symbol}"
+                f"&token={settings.FINNHUB_API_KEY}"
+            )
+
+            response = await client.get(
+                url,
+                timeout=settings.FINNHUB_TIMEOUT
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            current_price = data.get("c")
+
+            if current_price is None:
+                self._finnhub_breaker.record_failure()
+                logger.error(
+                    f"Failed to fetch current price for {symbol} using Finnhub"
+                )
+                return None
+
+            self._finnhub_breaker.record_success()
+            return float(current_price)
+
+        except Exception as e:
+            logger.error(f"Error fetching current price for {symbol}: {e}")
+            self._finnhub_breaker.record_failure()
+            return None
 
     async def fetch_benchmark_data(
         self,

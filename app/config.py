@@ -31,7 +31,6 @@ class Settings(BaseSettings):
 
     # Data providers
     FINNHUB_API_KEY: Optional[str] = None
-    YAHOO_TIMEOUT: int = 30
     FINNHUB_TIMEOUT: int = 15
 
     # Model configuration

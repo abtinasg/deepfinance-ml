@@ -40,7 +40,9 @@ async def get_symbol_info(
             from fastapi import HTTPException
             raise HTTPException(
                 status_code=404,
-                detail=f"Symbol not found: {symbol}"
+                detail=(
+                    f"Failed to fetch data for {symbol.upper()} using Finnhub"
+                )
             )
 
         # Get latest data

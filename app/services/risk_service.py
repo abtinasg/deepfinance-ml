@@ -48,7 +48,9 @@ class RiskService:
         )
 
         if asset_data is None or asset_data.empty:
-            raise ValueError(f"Failed to fetch data for {symbol}")
+            raise ValueError(
+                f"Failed to fetch data for {symbol} using Finnhub"
+            )
 
         # Calculate asset returns
         asset_returns = asset_data["close"].pct_change().dropna().values

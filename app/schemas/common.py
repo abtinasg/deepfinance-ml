@@ -59,6 +59,9 @@ class HealthResponse(BaseModel):
     )
     redis: bool = Field(default=False, description="Redis connection status")
     uptime_seconds: float = Field(default=0, description="Service uptime")
+    data_provider: str = Field(
+        ..., description="Active market data provider"
+    )
 
     class Config:
         json_schema_extra = {
@@ -73,7 +76,8 @@ class HealthResponse(BaseModel):
                     "transformer": {"loaded": True, "version": "1.0"}
                 },
                 "redis": True,
-                "uptime_seconds": 3600.5
+                "uptime_seconds": 3600.5,
+                "data_provider": "finnhub"
             }
         }
 
