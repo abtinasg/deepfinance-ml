@@ -12,6 +12,7 @@ httpx==0.26.0
 # Data Processing
 numpy==1.26.3
 pandas==2.1.4
+finnhub-python==2.4.21
 
 # Machine Learning
 xgboost==2.0.3

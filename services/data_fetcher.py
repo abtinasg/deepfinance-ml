@@ -1,11 +1,12 @@
 """
 Data fetching service using Finnhub as the sole provider.
 """
+import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
-import httpx
+import finnhub
 import numpy as np
 import pandas as pd
 
@@ -20,137 +21,133 @@ class DataFetcher:
     def __init__(self):
         self.finnhub_timeout = settings.FINNHUB_TIMEOUT
         self.finnhub_api_key = settings.FINNHUB_API_KEY
+        self._client: Optional[finnhub.Client] = None
+
+    def _get_client(self) -> Optional[finnhub.Client]:
+        if not self.finnhub_api_key:
+            logger.error("Finnhub API key not configured")
+            return None
+
+        if self._client is None:
+            self._client = finnhub.Client(api_key=self.finnhub_api_key)
+
+        return self._client
+
+    async def fetch_price_history(
+        self, symbol: str, period_days: int = 60
+    ) -> Dict[str, Any]:
+        """Fetch OHLCV candles from Finnhub.
+
+        Returns a dictionary with success flag and data/ reason.
+        """
+
+        client = self._get_client()
+        if client is None:
+            return {"success": False, "reason": "finnhub_failed"}
+
+        try:
+            end_time = datetime.utcnow()
+            start_time = end_time - timedelta(days=period_days)
+
+            candles = await asyncio.to_thread(
+                client.stock_candles,
+                symbol.upper(),
+                "D",
+                int(start_time.timestamp()),
+                int(end_time.timestamp()),
+            )
+
+            if not candles or candles.get("s") != "ok":
+                logger.error("Finnhub returned invalid status for %s", symbol)
+                return {"success": False, "reason": "finnhub_failed"}
+
+            timestamps = candles.get("t") or []
+            if not timestamps:
+                logger.error("Finnhub returned no timestamps for %s", symbol)
+                return {"success": False, "reason": "finnhub_failed"}
+
+            df = pd.DataFrame(
+                {
+                    "timestamp": pd.to_datetime(timestamps, unit="s"),
+                    "open": candles.get("o", []),
+                    "high": candles.get("h", []),
+                    "low": candles.get("l", []),
+                    "close": candles.get("c", []),
+                    "volume": candles.get("v", []),
+                }
+            )
+
+            if df.empty:
+                logger.error("Finnhub returned empty candles for %s", symbol)
+                return {"success": False, "reason": "finnhub_failed"}
+
+            logger.debug({"datasource": "finnhub", "symbol": symbol, "status": "success"})
+            return {"success": True, "data": df}
+
+        except Exception as exc:
+            logger.error("Finnhub error for %s: %s", symbol, exc)
+            return {"success": False, "reason": "finnhub_failed"}
+
+    async def fetch_symbol_info(self, symbol: str) -> Dict[str, Any]:
+        """Fetch symbol profile details from Finnhub."""
+
+        client = self._get_client()
+        if client is None:
+            return {"success": False, "reason": "finnhub_failed"}
+
+        try:
+            profile = await asyncio.to_thread(
+                client.company_profile2, {"symbol": symbol.upper()}
+            )
+
+            if not profile:
+                logger.error("Finnhub returned no profile for %s", symbol)
+                return {"success": False, "reason": "finnhub_failed"}
+
+            logger.debug({"datasource": "finnhub", "symbol": symbol, "status": "success"})
+            return {"success": True, "data": profile}
+
+        except Exception as exc:
+            logger.error("Finnhub profile error for %s: %s", symbol, exc)
+            return {"success": False, "reason": "finnhub_failed"}
 
     async def fetch_historical_data(
         self,
         symbol: str,
-        period_days: int = 60
+        period_days: int = 60,
     ) -> Optional[pd.DataFrame]:
-        """
-        Fetch historical OHLCV data for a symbol.
+        """Fetch historical OHLCV data for a symbol."""
 
-        Args:
-            symbol: Stock ticker symbol
-            period_days: Number of days of historical data
-
-        Returns:
-            DataFrame with OHLCV data or None if fetch fails
-        """
-        data = await self._fetch_from_finnhub(symbol, period_days)
+        result = await self.fetch_price_history(symbol, period_days)
+        data = result.get("data") if result.get("success") else None
 
         if data is None or data.empty:
-            logger.error(f"Failed to fetch data for {symbol} using Finnhub")
+            logger.error("Failed to fetch data for %s using Finnhub", symbol)
             return None
 
         return data
 
-    async def _fetch_from_finnhub(
-        self,
-        symbol: str,
-        period_days: int
-    ) -> Optional[pd.DataFrame]:
-        """Fetch data from Finnhub."""
-        if not self.finnhub_api_key:
-            logger.warning("Finnhub API key not configured")
-            return None
-
-        try:
-            end_time = int(datetime.now().timestamp())
-            start_time = int((datetime.now() - timedelta(days=period_days + 30)).timestamp())
-
-            url = "https://finnhub.io/api/v1/stock/candle"
-            params = {
-                "symbol": symbol,
-                "resolution": "D",
-                "from": start_time,
-                "to": end_time,
-                "token": self.finnhub_api_key
-            }
-
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    url,
-                    params=params,
-                    timeout=self.finnhub_timeout
-                )
-
-                if response.status_code != 200:
-                    logger.error(f"Finnhub returned status {response.status_code}")
-                    return None
-
-                data = response.json()
-
-                if data.get("s") != "ok":
-                    logger.error(f"Finnhub returned error: {data.get('s')}")
-                    return None
-
-                required_fields = {"o", "h", "l", "c", "v", "t"}
-                if not required_fields.issubset(data):
-                    logger.error(
-                        f"Finnhub response missing fields for {symbol}",
-                        extra={"missing": required_fields - set(data.keys())}
-                    )
-                    return None
-
-                if not data.get("t"):
-                    logger.error(f"Finnhub returned no timestamps for {symbol}")
-                    return None
-
-                df = pd.DataFrame({
-                    'open': data['o'],
-                    'high': data['h'],
-                    'low': data['l'],
-                    'close': data['c'],
-                    'volume': data['v']
-                })
-
-                if df.empty:
-                    logger.error(f"Finnhub returned empty data for {symbol}")
-                    return None
-
-                df.index = pd.to_datetime(data['t'], unit='s')
-
-                return df.tail(period_days)
-
-        except Exception as e:
-            logger.error(f"Finnhub error for {symbol}: {str(e)}")
-            return None
-
     async def fetch_current_price(self, symbol: str) -> Optional[float]:
         """Fetch current price for a symbol using Finnhub."""
-        if not self.finnhub_api_key:
-            logger.warning("Finnhub API key not configured")
+        client = self._get_client()
+        if client is None:
             return None
 
         try:
-            url = (
-                f"https://finnhub.io/api/v1/quote"
-                f"?symbol={symbol}&token={self.finnhub_api_key}"
-            )
+            quote = await asyncio.to_thread(client.quote, symbol.upper())
+            current_price = quote.get("c") if isinstance(quote, dict) else None
 
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    url,
-                    timeout=self.finnhub_timeout
+            if current_price is None:
+                logger.error(
+                    "Failed to fetch current price for %s using Finnhub", symbol
                 )
+                return None
 
-                if response.status_code != 200:
-                    logger.error(f"Finnhub quote status {response.status_code}")
-                    return None
+            logger.debug({"datasource": "finnhub", "symbol": symbol, "status": "success"})
+            return float(current_price)
 
-                data = response.json()
-                current_price = data.get('c')
-
-                if current_price is None:
-                    logger.error(
-                        f"Failed to fetch current price for {symbol} using Finnhub"
-                    )
-                    return None
-
-                return float(current_price)
-
-        except Exception as e:
-            logger.error(f"Error fetching current price for {symbol}: {str(e)}")
+        except Exception as exc:
+            logger.error("Error fetching current price for %s: %s", symbol, exc)
             return None
 
     async def fetch_benchmark_data(

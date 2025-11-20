@@ -35,6 +35,9 @@ class RiskService:
             Dict containing all risk metrics
         """
         try:
+            if asset_data is None or asset_data.empty:
+                return {"success": False, "message": "insufficient_data"}
+
             close_prices = asset_data['close'].values
 
             # Calculate returns
@@ -59,6 +62,7 @@ class RiskService:
             sortino_ratio = self.calculate_sortino_ratio(returns)
 
             return {
+                "success": True,
                 "volatility": {
                     "daily": float(volatility),
                     "annualized": float(volatility * np.sqrt(self.trading_days)),
